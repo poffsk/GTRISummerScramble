@@ -94,27 +94,34 @@ for i in range(0, len(datalist)):
             uni_rowlist.append(rowlist[i]) #keep that row index
             uni_collist.append(maplist[j][1]) #add the new, abridged column
 
+feature_matrix = np.zeros((12536, 1111))
+for pos, value in enumerate(uni_datalist):
+    feature_matrix[uni_rowlist[pos], uni_collist[pos]] = value
 
+training_labels = np.array(labels)
+                           
+                           
 
-kf = KFold(n_splits=2)
 
 
 # load data
-(X_train, y_train), (X_test, y_test) = mnist.load_data()
+X_train = feature_matrix
+y_train = training_labels
+#(X_train, y_train), (X_test, y_test) = feature_matrix, test_matrix
 # reshape to be [samples][width][height][channels]
-X_train = X_train.reshape((X_train.shape[0], 28, 28, 1)).astype('float32')
-X_test = X_test.reshape((X_test.shape[0], 28, 28, 1)).astype('float32')
+#X_train = X_train.reshape((X_train.shape[0], 28, 28, 1)).astype('float32')
+#X_test = X_test.reshape((X_test.shape[0], 28, 28, 1)).astype('float32')
 
 # normalize inputs from 0-255 to 0-1
 X_train = X_train / (num_APIs + 1) #may need to also count test data APIs
-X_test = X_test / (num_APIs + 1) #bc don't want to give value greater than one
+#X_test = X_test / (num_APIs + 1) #bc don't want to give value greater than one
 #X_train = X_train / 255
 #X_test = X_test / 255
 # one hot encode outputs
 y_train = np_utils.to_categorical(y_train)
-y_test = np_utils.to_categorical(y_test)
-num_classes = y_test.shape[1]
-
+#y_test = np_utils.to_categorical(y_test)
+#num_classes = y_test.shape[1]
+kf = KFold(n_splits=5)
 kf.get_n_splits(X_train)
 
 """>>> kf.get_n_splits(X)
@@ -125,17 +132,20 @@ KFold(n_splits=2, random_state=None, shuffle=False)"""
 #let's start with just dense layer connecting 1111 inputs to 5 outputs
 def larger_model():
     model = Sequential()
-    model.add(Conv2D(30, (5, 5), input_shape=(28, 28, 1), activation='relu')) #modify
+    model.add(Flatten(input_shape = (1111,)))
+    model.add(Dropout(0.2))
+    model.add(Dense(5, activation='relu'))
+    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+    return model
+    """model.add(Conv2D(30, (5, 5), input_shape=(28, 28, 1), activation='relu')) #modify
     model.add(MaxPooling2D()) #modify
     model.add(Conv2D(15, (3, 3), activation='relu')) #modify
     model.add(MaxPooling2D()) #modify?
-    model.add(Dropout(0.2))
     model.add(Flatten())
     model.add(Dense(128, activation='relu'))
     model.add(Dense(50, activation='relu'))
-    model.add(Dense(num_classes, activation='softmax'))
-    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
-    return model
+    model.add(Dense(num_classes, activation='softmax')) """
+    
 # build the model
 model = larger_model()
 
@@ -145,11 +155,11 @@ for train_index, test_index in kf.split(X_train): #might need to tack on targets
     print("TRAIN:", train_index, "TEST:", test_index)
     X_trainK, X_testK = X_train[train_index], X_train[test_index]
     y_trainK, y_testK = y_train[train_index], y_train[test_index]
-    model.fit(X_trainK, y_trainK, validation_data=(X_testK, y_testK), epochs=2, batch_size=100)
-    scores = model.evaluate(X_test, y_test, verbose=0) #should I change this verbose value?
-    scoresvec.append((100-scores[1]*100))
+    model.fit(X_trainK, y_trainK, validation_data=(X_testK, y_testK), epochs=5, batch_size=200)
+  #  scores = model.evaluate(X_test, y_test, verbose=0) #should I change this verbose value?
+  #  scoresvec.append((100-scores[1]*100))
 
 #CUDA, total of three
     #cuda 10.1...
-y_pred = model.predict(X_test[0:101])
+#y_pred = model.predict(X_test[0:101])
 #model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=10, batch_size=200)

@@ -26,6 +26,7 @@ from keras.models import Sequential
 from keras.layers import Dense
 from keras.layers import Dropout
 from keras.layers import Flatten
+from keras.optimizers import Adam
 from keras.layers.convolutional import Conv2D
 from keras.layers.convolutional import MaxPooling2D
 from keras.utils import np_utils
@@ -102,7 +103,17 @@ training_labels = np.array(labels)
                            
                            
 
+#let's save this to a json for tomorrow
+uni_dict={}
+uni_dict['uni_datalist'] = uni_datalist
+uni_dict['uni_rowlist'] = uni_rowlist
+uni_dict['uni_collist'] = uni_collist
+uni_dict['maplist'] = maplist
+uni_dict['uni_col_schema'] = uni_col_schema
+uni_dict['labels'] = labels
 
+with open('unidata.json', 'w', encoding='utf-8') as f:
+    json.dump(uni_dict, f, ensure_ascii=False, indent=4)
 
 # load data
 X_train = feature_matrix
@@ -134,8 +145,10 @@ def larger_model():
     model = Sequential()
     model.add(Flatten(input_shape = (1111,)))
     model.add(Dropout(0.2))
-    model.add(Dense(5, activation='relu'))
-    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+    model.add(Dense(75, activation='relu'))
+    model.add(Dense(5, activation='softmax'))
+    model.compile(optimizer=Adam(learning_rate=0.2), loss='categorical_crossentropy', metrics=['accuracy'])
+#    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
     return model
     """model.add(Conv2D(30, (5, 5), input_shape=(28, 28, 1), activation='relu')) #modify
     model.add(MaxPooling2D()) #modify

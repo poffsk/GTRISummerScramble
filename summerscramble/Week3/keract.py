@@ -86,7 +86,7 @@ validation_split = 0.2
 verbosity = 0
 
 
-kf = KFold(n_splits=2)
+kf = KFold(n_splits=5)
 
 # load data
 (X_train, y_train), (X_test, y_test) = mnist.load_data()
@@ -128,12 +128,24 @@ def larger_model():
     model.add(Dropout(0.2))
     model.add(Flatten())
     model.add(Dense(128, activation='relu'))
-    model.add(Dense(50, activation='relu'))
+    #model.add(Dense(50, activation='relu'))
     model.add(Dense(no_classes, activation='softmax'))
     model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
     return model
 # build the model
 model = larger_model()
+
+"""# Create the model
+model = Sequential()
+model.add(Conv2D(32, kernel_size=(3, 3), activation='relu', input_shape=input_shape))
+model.add(MaxPooling2D(pool_size=(2, 2)))
+model.add(Dropout(0.25))
+model.add(Conv2D(64, kernel_size=(3, 3), activation='relu'))
+model.add(MaxPooling2D(pool_size=(2, 2)))
+model.add(Dropout(0.25))
+model.add(Flatten())
+model.add(Dense(256, activation='relu'))
+model.add(Dense(no_classes, activation='softmax'))"""
 
 scoresvec = []
 
@@ -152,10 +164,26 @@ y_pred = model.predict(X_test[0:101])
 
 
 from keract import get_activations, display_activations
-keract_inputs = X_test[:1]
-keract_target=y_test[:1]
-actives=get_activations(model, keract_inputs)
-display_activations(actives, cmap='gray', save=False)
+#keract_inputs = X_train[:1]
+#keract_target= y_train[:1]
+#actives=get_activations(model, keract_inputs, layer_names = 'dense')
+#X_train = X_train.reshape((X_train.shape[0], img_width, img_height, 1)).astype('float32')
+
+active_sum=np.zeros((no_classes, 128)) #each row is a class, 128 cols = sum of each node
+active_sum2=np.zeros((no_classes, 128))
+class_obs=np.zeros((10))
+for i in range(0, len(X_train)):
+    keract_inputs = X_train[i:i+1]
+    keract_targets = y_train[i]
+    img_class = int(np.where(keract_targets == 1)[0][0])
+    actives=get_activations(model, keract_inputs, layer_names = 'dense')
+    layer_vals = actives['dense'][0]
+    active_sum[img_class] = active_sum[img_class] + layer_vals
+    active_sum2[img_class] = active_sum2[img_class] + np.square(layer_vals)
+    #we will also need to know how many of each class we observed
+    class_obs[img_class] +=1
+    
+#display_activations(actives, cmap='gray', save=False)
 
 #heatmaps
 from keract import display_heatmaps

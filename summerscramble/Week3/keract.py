@@ -172,7 +172,7 @@ from keract import get_activations, display_activations
 active_sum=np.zeros((no_classes, 128)) #each row is a class, 128 cols = sum of each node
 active_sum2=np.zeros((no_classes, 128))
 class_obs=np.zeros((10))
-for i in range(0, len(X_train)):
+for i in range(0, 5001):
     keract_inputs = X_train[i:i+1]
     keract_targets = y_train[i]
     img_class = int(np.where(keract_targets == 1)[0][0])
@@ -181,7 +181,38 @@ for i in range(0, len(X_train)):
     active_sum[img_class] = active_sum[img_class] + layer_vals
     active_sum2[img_class] = active_sum2[img_class] + np.square(layer_vals)
     #we will also need to know how many of each class we observed
-    class_obs[img_class] +=1
+    class_obs[img_class] += 1
+
+active_mean=np.zeros((no_classes, 128))
+divided_squares=np.zeros((no_classes, 128))
+#squared_sums=np.zeros((no_classes, 128))
+for i in range(0, len(active_sum)):
+    active_mean[i] = active_sum[i]/ class_obs[i]
+    divided_squares[i] = active_sum2[i] / class_obs[i]
+    #squared_sums = np.square(active_sum[i] / class_obs[i])
+#so now that we have the means and standard deviations... let's create boundaries
+
+active_stdev=np.zeros((no_classes, 128))
+for i in range(0, len(active_stdev)):
+    class_var=np.subtract(divided_squares[i], np.square(active_mean[i]))
+    active_stdev[i] = np.sqrt(class_var)
+
+#now that we have active_mean and active_stdev, we need to go back through the examples and tally the number beyonds one stdev
+beyond_one_stdev = np.zeros((no_classes, 128))
+for i in range(0, 5001):
+    keract_inputs = X_train[i:i+1]
+    keract_targets = y_train[i]
+    img_class = int(np.where(keract_targets == 1)[0][0])
+    actives=get_activations(model, keract_inputs, layer_names = 'dense')
+    layer_vals = actives['dense'][0]
+    for j in range(0, len(layer_vals)):
+        #if the difference between current activation and mean activation is larger than stdev
+        if abs(layer_vals[j]-active_mean[img_class][j]) > active_stdev[img_class][j]:
+            beyond_one_stdev[img_class][j] +=1
+    
+    
+#with open(r'C:\Users\Sarah\Desktop\Su20\DNN\summerscramble\summerscramble\Week3\keract_actives.json', 'w', encoding='utf-8') as f:
+#    json.dump(activation_dict, f, ensure_ascii=False, indent=4)
     
 #display_activations(actives, cmap='gray', save=False)
 
@@ -191,21 +222,7 @@ display_heatmaps(actives, keract_inputs, save=False)
 #model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=10, batch_size=200)
 
 
-#images = X_test[0:101]
-#labels = y_test[0:101]
 
-
-#fmodel = create()
-#fmodel = fb.PyTorchModel(model=model, bounds=(0, 1))
-#return fmodel
-# https://foolbox.readthedocs.io/en/v2.3.0/user/examples.html
-#fmodel = fb.models.TensorFlowModel(model=model, bounds = (0.0,1.0), device = None) #this one crashes
-#fmodel = TensorFlowModel(model, bounds = (0,1))
-#nooo it crashed
-
-#images, labels = samples(fmodel, dataset = "mnist", batchsize = 100)
-#images1, labels1 = ep.astensors(*samples(fmodel, dataset = "mnist", batchsize = 100)) 
-#print(accuracy(fmodel, images1, labels1))
 
 
 images_arr = np.array(images)
@@ -220,51 +237,6 @@ plt.show()
 
 
 epsilons = [0.0, 0.001, 0.01, 0.03, 0.1, 0.3, 0.5, 1.0]
-
-
-fmodel = foolbox.models.TensorFlowModel(model, bounds = (0.0,1.0)) #this one crashes
-fmodel = fmodel.transform_bounds((0,1))
-#assert fmodel.bounds==(0,1)
-
-#images = X_test[0:101]
-#labels = y_test[0:101]
-
-#images, labels = ep.astensors(*samples(fmodel, dataset="mnist", batchsize=20))
-images, labels = ep.astensors(*samples(images, labels))
-#print(accuracy(fmodel, images, labels))
-
-
-attack = fb.attacks.LinfPGD()
-_, advs, success = attack(fmodel, images, labels, epsilons= 0.03)
-
-print(success)
-
-
-listsuccess = []
-for anepval in success:
-    print(anepval)
-    totalsuccess=0
-    for abool in anepval:
-        abool1 = np.array(abool)
-        if abool1==True:
-            totalsuccess+=1
-    listsuccess.append(totalsuccess)
-    
-print(listsucess)
-
-
-#with tf.keras.backend.get_session().as_default():
-#    foolbox_model = foolbox.models.TensorFlowModel.from_keras(model=network, bounds=(0.0, 1.0))
-
-# https://foolbox.readthedocs.io/en/v2.3.0/user/examples.html
-
-
-
-predict = fmodel(images).numpy()
-#I wonder what the two lines below do
-tf.nn.softmax(predict).numpy()
-correct_pred = tf.math.argmax(predict, 1)
-print(correct_pred)
 
 
 

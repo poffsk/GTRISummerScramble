@@ -54,27 +54,6 @@ import csv
 #clf = svm.SVC(kernel='linear', C=1)
 #scores = cross_val_score(clf, iris.data, iris.target, cv=5)
 
-"""
-#extra adversarial example images from Camille
-image_pre_array=[]
-
-with open('dfadvpics.csv') as csvfile:
-    reader = csv.DictReader(csvfile)
-    for row in reader:
-        image_pre_array.append(row)
-
-#start with 16 rows, 784 columns       
-image_array=np.zeros(16, 28, 28, 1)
-image_keys = ['image1', 'image2', 'image3', 'image4', 'image5', 'image6', 'image7', 'image8', 'image9', 'image10', 'image11', 'image12', 'image13', 'image14', 'image15', 'image16']
-i=-1
-j=-1
-
-#keys are '', image1, ..., image16
-for row in image_pre_array: #16 or 17 entries per row, 784 rows
-    i+=1 #row number
-    for key in image_keys:
-        j+=1 #value number
-    image_array[int(key[-1])-1][i][j]= int(row[key])"""
 
 #configure model
     
@@ -88,7 +67,6 @@ verbosity = 0
 
 kf = KFold(n_splits=5)
 
-# load data
 (X_train, y_train), (X_test, y_test) = mnist.load_data()
 # reshape to be [samples][width][height][channels]
 
@@ -102,17 +80,21 @@ else:
     X_train = X_train.reshape((X_train.shape[0], img_width, img_height, 1)).astype('float32')
     X_test = X_test.reshape((X_test.shape[0], img_width, img_height, 1)).astype('float32')
     input_shape = (img_width, img_height, 1)
-    
+X_train = X_train.reshape((X_train.shape[0], img_width, img_height, 1)).astype('float32')
+X_test = X_test.reshape((X_test.shape[0], img_width, img_height, 1)).astype('float32')
+input_shape = (28, 28, 1)
+   
 
 # normalize inputs from 0-255 to 0-1
 X_train = X_train / 255
 X_test = X_test / 255
 # one hot encode outputs
-y_train = np_utils.to_categorical(y_train)
-y_test = np_utils.to_categorical(y_test)
+y_train = np_utils.to_categorical(y_train, no_classes)
+y_test = np_utils.to_categorical(y_test, no_classes)
 #y_train = tf.keras.utils.to_categorical(y_train, no_classes)
 #y_test = tf.keras.utils.to_categorical(y_test, no_classes)
 #num_classes = y_test.shape[1]
+
 """>>> kf.get_n_splits(X_train)
 2
 >>> print(kf)
@@ -150,7 +132,7 @@ model.add(Dense(no_classes, activation='softmax'))"""
 scoresvec = []
 
 for train_index, test_index in kf.split(X_train): #might need to tack on targets here
-    print("TRAIN:", train_index, "TEST:", test_index)
+    #print("TRAIN:", train_index, "TEST:", test_index)
     X_trainK, X_testK = X_train[train_index], X_train[test_index]
     y_trainK, y_testK = y_train[train_index], y_train[test_index]
     model.fit(X_trainK, y_trainK, validation_data=(X_testK, y_testK), epochs=5, batch_size=100)
@@ -158,16 +140,12 @@ for train_index, test_index in kf.split(X_train): #might need to tack on targets
     print(f'Test loss: {scores[0]} / Test accuracy: {scores[1]}')
     scoresvec.append((100-scores[1]*100))
 
-#CUDA, total of three
-    #cuda 10.1...
+
 y_pred = model.predict(X_test[0:101])
 
 
 from keract import get_activations, display_activations
-#keract_inputs = X_train[:1]
-#keract_target= y_train[:1]
-#actives=get_activations(model, keract_inputs, layer_names = 'dense')
-#X_train = X_train.reshape((X_train.shape[0], img_width, img_height, 1)).astype('float32')
+
 
 active_sum=np.zeros((no_classes, 128)) #each row is a class, 128 cols = sum of each node
 active_sum2=np.zeros((no_classes, 128))
@@ -213,18 +191,71 @@ for i in range(0, 5001):
     
 #with open(r'C:\Users\Sarah\Desktop\Su20\DNN\summerscramble\summerscramble\Week3\keract_actives.json', 'w', encoding='utf-8') as f:
 #    json.dump(activation_dict, f, ensure_ascii=False, indent=4)
+            
+            
+#Let's try to save some of these arrays...
+np.savetxt("active_mean.csv", active_mean, delimiter=",")
+np.savetxt("active_sum.csv", active_sum, delimiter=",")
+np.savetxt("active_sum2.csv", active_sum2, delimiter=",")
+np.savetxt("class_obs.csv", class_obs, delimiter=",")
+np.savetxt("active_stdev.csv", active_stdev, delimiter=",")
+np.savetxt("beyond_one_stdev.csv", beyond_one_stdev, delimiter=",")
+
+from numpy import genfromtxt
+active_mean = genfromtxt('active_mean.csv', delimiter=',')
+active_sum = genfromtxt('active_sum.csv', delimiter=',')
+active_sum2 = genfromtxt('active_sum2.csv', delimiter=',')
+class_obs = genfromtxt('class_obs.csv', delimiter=',')
+active_stdev = genfromtxt('active_stdev.csv', delimiter=',')
+beyond_one_stdev = genfromtxt('beyond_one_stdev.csv', delimiter=',')
+
+
+#create arrays of adversarial images from Camille
+dfadvpics=genfromtxt('dfadvpics.csv', delimiter=',')
+dfadvpics2=genfromtxt('dfadvspics2.csv', delimiter=',')
+
+advpics = np.transpose(dfadvpics)
+advpics = advpics[1:, 1:]
+image_array=np.zeros((len(advpics), 28, 28, 1))
+for i in range(0, len(advpics)):
+    image_array[i] = advpics[i].reshape(28, 28, 1)
+
+
+adv2pics = np.transpose(dfadvpics2)
+adv2pics = adv2pics[1:, 1:]
+image2_array=np.zeros((len(adv2pics), 28, 28, 1))
+for i in range(0, len(adv2pics)):
+    image2_array[i] = adv2pics[i].reshape(28, 28, 1)
+    
+    
+
+adv_active_sum=np.zeros((no_classes, 128)) #each row is a class, 128 cols = sum of each node
+adv_active_sum2=np.zeros((no_classes, 128))
+adv_class_obs=np.zeros((no_classes))
+for i in range(0, len(advpics)):
+    keract_inputs = image_array[i:i+1]
+    keract_targets = y_train[i] #assuming they were produced in same order
+    img_class = int(np.where(keract_targets == 1)[0][0])
+    actives=get_activations(model, keract_inputs, layer_names = 'dense')
+    layer_vals = actives['dense'][0]
+    adv_active_sum[img_class] = adv_active_sum[img_class] + layer_vals
+    adv_active_sum2[img_class] = adv_active_sum2[img_class] + np.square(layer_vals)
+    #we will also need to know how many of each class we observed
+    adv_class_obs[img_class] += 1
+
+
+
+
     
 #display_activations(actives, cmap='gray', save=False)
 
 #heatmaps
 from keract import display_heatmaps
 display_heatmaps(actives, keract_inputs, save=False)
-#model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=10, batch_size=200)
 
 
 
-
-
+"""
 images_arr = np.array(images)
 #plot images before attack
 fig, axes = plt.subplots(1, 100, figsize = (28,28))
@@ -236,7 +267,4 @@ plt.tight_layout()
 plt.show()
 
 
-epsilons = [0.0, 0.001, 0.01, 0.03, 0.1, 0.3, 0.5, 1.0]
-
-
-
+epsilons = [0.0, 0.001, 0.01, 0.03, 0.1, 0.3, 0.5, 1.0]"""

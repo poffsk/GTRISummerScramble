@@ -36,6 +36,7 @@ from keras.layers import Flatten
 from keras.layers.convolutional import Conv2D
 from keras.layers.convolutional import MaxPooling2D
 from keras.utils import np_utils
+from keras.models import load_model
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import backend as K
@@ -45,6 +46,9 @@ from sklearn.model_selection import KFold
 import matplotlib.pyplot as plt
 import json
 import csv
+from keract import get_activations, display_activations
+from numpy import genfromtxt
+from keract import display_heatmaps
 #import foolbox as fb
 #from foolbox import TensorFlowModel, accuracy, samples
 #from foolbox.attacks import LinfPGD
@@ -72,14 +76,7 @@ kf = KFold(n_splits=5)
 
 
 #reshape data based on if channels ordering (first or last):
-if K.image_data_format()=='channels_first':
-    X_train = X_train.reshape((X_train.shape[0], 1, img_width, img_height)).astype('float32')
-    X_test = X_test.reshape((X_test.shape[0], 1, img_width, img_height)).astype('float32')
-    input_shape = (1, img_width, img_height)
-else:
-    X_train = X_train.reshape((X_train.shape[0], img_width, img_height, 1)).astype('float32')
-    X_test = X_test.reshape((X_test.shape[0], img_width, img_height, 1)).astype('float32')
-    input_shape = (img_width, img_height, 1)
+
 X_train = X_train.reshape((X_train.shape[0], img_width, img_height, 1)).astype('float32')
 X_test = X_test.reshape((X_test.shape[0], img_width, img_height, 1)).astype('float32')
 input_shape = (28, 28, 1)
@@ -99,23 +96,34 @@ y_test = np_utils.to_categorical(y_test, no_classes)
 2
 >>> print(kf)
 KFold(n_splits=2, random_state=None, shuffle=False)"""
-
+"""if K.image_data_format()=='channels_first':
+    X_train = X_train.reshape((X_train.shape[0], 1, img_width, img_height)).astype('float32')
+    X_test = X_test.reshape((X_test.shape[0], 1, img_width, img_height)).astype('float32')
+    input_shape = (1, img_width, img_height)
+else:
+    X_train = X_train.reshape((X_train.shape[0], img_width, img_height, 1)).astype('float32')
+    X_test = X_test.reshape((X_test.shape[0], img_width, img_height, 1)).astype('float32')
+    input_shape = (img_width, img_height, 1)
+"""
 
 def larger_model():
     model = Sequential()
     model.add(Conv2D(30, (5, 5), input_shape=input_shape, activation='relu'))
     model.add(MaxPooling2D(pool_size=(2,2)))
     model.add(Conv2D(15, (3, 3), activation='relu'))
-    model.add(MaxPooling2D())
+#    model.add(MaxPooling2D())
     model.add(Dropout(0.2))
     model.add(Flatten())
     model.add(Dense(128, activation='relu'))
-    #model.add(Dense(50, activation='relu'))
+#    model.add(Dense(50, activation='relu'))
     model.add(Dense(no_classes, activation='softmax'))
     model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
     return model
 # build the model
 model = larger_model()
+
+from tensorflow import keras
+model = keras.models.load_model('model')
 
 """# Create the model
 model = Sequential()
@@ -132,10 +140,9 @@ model.add(Dense(no_classes, activation='softmax'))"""
 scoresvec = []
 
 for train_index, test_index in kf.split(X_train): #might need to tack on targets here
-    #print("TRAIN:", train_index, "TEST:", test_index)
     X_trainK, X_testK = X_train[train_index], X_train[test_index]
     y_trainK, y_testK = y_train[train_index], y_train[test_index]
-    model.fit(X_trainK, y_trainK, validation_data=(X_testK, y_testK), epochs=5, batch_size=100)
+    model.fit(X_trainK, y_trainK, validation_data=(X_testK, y_testK), epochs=5, batch_size=200)
     scores = model.evaluate(X_test, y_test, verbose=0)
     print(f'Test loss: {scores[0]} / Test accuracy: {scores[1]}')
     scoresvec.append((100-scores[1]*100))
@@ -143,8 +150,8 @@ for train_index, test_index in kf.split(X_train): #might need to tack on targets
 
 y_pred = model.predict(X_test[0:101])
 
-
-from keract import get_activations, display_activations
+from tensorflow import keras
+model = keras.models.load_model('path/to/location')
 
 
 active_sum=np.zeros((no_classes, 128)) #each row is a class, 128 cols = sum of each node
@@ -201,7 +208,7 @@ np.savetxt("class_obs.csv", class_obs, delimiter=",")
 np.savetxt("active_stdev.csv", active_stdev, delimiter=",")
 np.savetxt("beyond_one_stdev.csv", beyond_one_stdev, delimiter=",")
 
-from numpy import genfromtxt
+
 active_mean = genfromtxt('active_mean.csv', delimiter=',')
 active_sum = genfromtxt('active_sum.csv', delimiter=',')
 active_sum2 = genfromtxt('active_sum2.csv', delimiter=',')
@@ -211,14 +218,38 @@ beyond_one_stdev = genfromtxt('beyond_one_stdev.csv', delimiter=',')
 
 
 #create arrays of adversarial images from Camille
-dfadvpics=genfromtxt('dfadvpics.csv', delimiter=',')
-dfadvpics2=genfromtxt('dfadvspics2.csv', delimiter=',')
 
-advpics = np.transpose(dfadvpics)
-advpics = advpics[1:, 1:]
-image_array=np.zeros((len(advpics), 28, 28, 1))
-for i in range(0, len(advpics)):
-    image_array[i] = advpics[i].reshape(28, 28, 1)
+#create array of 100 images to run adversarial attack on
+benign_100=np.zeros((100, 28, 28, 1))
+jarray = np.zeros(10)
+b100_indices = np.zeros((10,10))
+while np.sum(jarray) < 100:
+    for i in range(0,len(X_train)):
+        keract_inputs = X_train[i:i+1]
+        keract_targets = y_train[i]
+        img_class = int(np.where(keract_targets == 1)[0][0])
+        if jarray[img_class] < 10: #if we don't already have 10
+            count = int(jarray[img_class])
+            b100_indices[img_class][count] = i
+            jarray[img_class]+=1
+
+for i in range(0, 10):
+    for j in range(0, 10):
+        index = int(b100_indices[i][j])
+        benign_100[i*10 + j] = X_train[index:index+1]
+
+
+
+
+dfadv1pics=genfromtxt('dfadvpics.csv', delimiter=',')
+dfadvpics2=genfromtxt('dfadvspics2.csv', delimiter=',')
+dfadv_by_class = genfromtxt('dfadv_by_class.csv', delimiter=',')
+
+adv1pics = np.transpose(dfadv1pics)
+adv1pics = adv1pics[1:, 1:]
+image1_array=np.zeros((len(adv1pics), 28, 28, 1))
+for i in range(0, len(adv1pics)):
+    image1_array[i] = adv1pics[i].reshape(28, 28, 1)
 
 
 adv2pics = np.transpose(dfadvpics2)
@@ -226,10 +257,16 @@ adv2pics = adv2pics[1:, 1:]
 image2_array=np.zeros((len(adv2pics), 28, 28, 1))
 for i in range(0, len(adv2pics)):
     image2_array[i] = adv2pics[i].reshape(28, 28, 1)
-    
-    
+ 
+#all 100 images
+advpics = np.transpose(dfadv_by_class)
+advpics = advpics[1:, 1:]
+image_array=np.zeros((len(advpics), 28, 28, 1))
+for i in range(0, len(advpics)):
+    image_array[i] = advpics[i].reshape(28, 28, 1)
+   
 
-adv_active_sum=np.zeros((no_classes, 128)) #each row is a class, 128 cols = sum of each node
+"""adv_active_sum=np.zeros((no_classes, 128)) #each row is a class, 128 cols = sum of each node
 adv_active_sum2=np.zeros((no_classes, 128))
 adv_class_obs=np.zeros((no_classes))
 for i in range(0, len(advpics)):
@@ -242,15 +279,56 @@ for i in range(0, len(advpics)):
     adv_active_sum2[img_class] = adv_active_sum2[img_class] + np.square(layer_vals)
     #we will also need to know how many of each class we observed
     adv_class_obs[img_class] += 1
+"""
 
+#the first ten images were 0, then next 10 were one, etc to indexes 90-99
+beyond_one_stdev_adv = np.zeros((no_classes, 128))
+for i in range(0, 99):
+    keract_inputs = image_array[i:i+1]
+    #keract_targets = y_train[i] #what does this line do...
+    img_class = int(round(i/10, 0))
+    actives=get_activations(model, keract_inputs, layer_names = 'dense')
+    layer_vals = actives['dense'][0]
+    for j in range(0, len(layer_vals)):
+        #if the difference between current activation and mean activation is larger than stdev
+        if abs(layer_vals[j]-active_mean[img_class][j]) > active_stdev[img_class][j]:
+            beyond_one_stdev_adv[img_class][j] +=1
 
+#2853 are out of bounds according to their original class
+np.savetxt("beyond_one_stdev_adv.csv", beyond_one_stdev_adv, delimiter=",")
+beyond_one_stdev_adv = genfromtxt('beyond_one_stdev_adv.csv', delimiter=',')
 
+#this one will compare the 100 images to their adversarial classes
+y_pred = model.predict(image_array)
 
+beyond_one_stdev_adv2 = np.zeros((no_classes, 128))
+for i in range(0, 99):
+    keract_inputs = image_array[i:i+1]
+    keract_targets = y_pred[i]
+    max_value = max(y_pred[i])
+    img_class = int(np.where(keract_targets >= max_value)[0][0])
+    actives=get_activations(model, keract_inputs, layer_names = 'dense')
+    layer_vals = actives['dense'][0]
+    for j in range(0, len(layer_vals)):
+        #if the difference between current activation and mean activation is larger than stdev
+        if abs(layer_vals[j]-active_mean[img_class][j]) > active_stdev[img_class][j]:
+            beyond_one_stdev_adv2[img_class][j] +=1
     
+#1813 are out of bounds according to their 'new' classes...
+#I'd like to know how many are the same...
+np.savetxt("beyond_one_stdev_adv2.csv", beyond_one_stdev_adv2, delimiter=",")
+beyond_one_stdev_adv2 = genfromtxt('beyond_one_stdev_adv.csv2', delimiter=',')
+
+for i in range(0,99):
+    max_value = max(y_pred[i])
+    img_class = int(np.where(y_pred[i] >= max_value)[0][0])
+    print(img_class)
+#wait, we don't need to calculate the 
+#one two classified as a 7, one 5classified as a 3    
 #display_activations(actives, cmap='gray', save=False)
 
 #heatmaps
-from keract import display_heatmaps
+
 display_heatmaps(actives, keract_inputs, save=False)
 
 

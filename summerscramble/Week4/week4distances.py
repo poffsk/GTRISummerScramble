@@ -150,11 +150,9 @@ for train_index, test_index in kf.split(X_train): #might need to tack on targets
     scoresvec.append((100-scores[1]*100))"""
 
 
-y_pred = model.predict(X_test[0:101])
-
 from tensorflow import keras
 model = keras.models.load_model('model')
-
+y_pred = model.predict(X_test[0:101])
 
 active_sum=np.zeros((no_classes, 128)) #each row is a class, 128 cols = sum of each node
 active_sum2=np.zeros((no_classes, 128))
@@ -465,26 +463,62 @@ plt.show()
 
 #Let's see which neurons we *really* need to consider...
 from sklearn.decomposition import PCA
+from scipy.stats import chi2
 
+#image = images_array[0:1] #a five that the model thinks is a 3
+#keract_inputs = image
 
-image = images_array[0:1] #a five that the model thinks is a 3
-keract_inputs = image
-#keract_targets = y_pred[0]
-heat_array = np.zeros((1,16))
-#img_class = int(np.where(keract_targets == 1)[0][0])
-actives=get_activations(model, keract_inputs, layer_names = 'dense')
-layer_vals = actives['dense'][0][0:16]
-
-
-stored_layers=np.zeros((1000, 128))
-for i in range(0, 1000):
-    keract_inputs = X_train[i:i+1]
+five_images = np.zeros((len(five_indexes), 28, 28, 1))
+for i in range(0, len(five_indexes)):
+    five_images[i] = X_train[five_indexes[i]]
+    
+#five_indexes=[]
+stored_5_layers=np.zeros((len(five_indexes)+1, 128))
+for i in range(0, len(five_images)):
+    keract_inputs = five_images[i:i+1]
+#    keract_targets = y_train[i]
     actives=get_activations(model, keract_inputs, layer_names = 'dense')
     layer_vals = actives['dense'][0]
-    stored_layers[i] = layer_vals
+    stored_5_layers[i] = layer_vals
+#    img_class = int(np.where(keract_targets == 1)[0][0])
+#    if int(img_class) == 5:
+#        five_indexes.append(i)  
+    
+#adversarial activations for first image
+actives=get_activations(model, image_array[0:1], layer_names = 'dense')
+adv_layer_vals = actives['dense'][0]
 
-#so now let's give our model 100 data points and see if it can hope with 128 neurons...
-pca = PCA(n_components = 128)
-pca.fit(stored_layers)
-var_ratios_1000 = pca.explained_variance_ratio_
+stored_5_layers[434] = adv_layer_vals
+
+#we have 434 examples from the 5 class
+pca = PCA(n_components = 35)
+proj=pca.fit_transform(stored_5_layers)
+#adv_transform=pca.transform(adv_layer_vals, 35)
+var_5_ratios = pca.explained_variance_ratio_
 print(pca.explained_variance_ratio_)
+
+
+#Here is the good stuff
+#x=pca.transform(stored_5_layers)
+x=proj
+x_mean=np.zeros((35))
+for i in range(0, len(x)):
+    x_mean = x_mean + x[i]
+    
+x_mean = x_mean / len(proj)
+adv_x = proj[434] #434 is the adversarial
+x_minus_mean = adv_x - x_mean
+cov = np.cov(proj.T)
+inv_covmat  = np.linalg.inv(cov)
+left_term = np.dot(x_minus_mean, inv_covmat)
+mahal = np.dot(left_term, x_minus_mean.T)
+#mahala = 224.68914, so now we need a p value
+#so transform the stored layouts
+#and also transform that one image... how do we make sure same transformation?
+#then calculate mahalanobis distance from image to class [means...]
+
+#now we calculate p value
+
+p_val = 1 - chi2.cdf(mahal, 34)
+
+#p_val = 0 for adversarial, p_val = .202 for normal
